@@ -1,0 +1,232 @@
+import streamlit as st
+import pandas as pd
+import openai
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import json
+import re
+from dotenv import load_dotenv
+import os
+
+# Load environment variables
+load_dotenv()
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+SMTP_SERVER = os.getenv('SMTP_SERVER')
+SMTP_PORT = int(os.getenv('SMTP_PORT'))
+SMTP_USERNAME = os.getenv('SMTP_USERNAME')
+SMTP_PASSWORD = os.getenv('SMTP_PASSWORD')
+
+openai.api_key = OPENAI_API_KEY
+
+# Utility functions
+def load_excel(file):
+    return pd.read_excel(file)
+
+def save_to_excel(df, file_path):
+    df.to_excel(file_path, index=False)
+
+def generate_prompt(row):
+    template = """
+    As an expert email marketer at Cvent Company, your task is to craft a personalized email sequence for Mr. {contact_name}, who holds the position of {Title} and is a {persona} at the company named {company_name}, which operates in the {Industry} software industry. The email sequence should consist of 3 emails, aimed at improving conversion for the campaign.
+
+    The company {company_name} has {Parent_company} as its parent company, which is already a Cvent customer. Cvent has previously assisted {Parent_company} with {Relation_with_parent_company}. Mr. {contact_name} has {Contact_Engagement_data}. Each email should pay special attention to the client's role and responsibilities, industry challenges, and the purpose of the email. The emails should showcase Cvent's expertise in providing solutions for event planners and marketers, including online event registration, venue selection, event management and marketing, virtual, hybrid, and onsite solutions, and attendee engagement.
+
+    Ensure that each email is personalized to address the client's specific needs and demonstrates the value of Cvent's software solutions. The content should be compelling, addressing the client's challenges, and include bulleted benefits where appropriate. Each email must include a CTA (Call to Action) at the end.
+
+    The output should be structured as follows:
+
+    Email 1:
+
+    Subject Line: [Concise subject line]
+    Body: [Organized content with distinct points, challenges, benefits, and CTA]
+    Signature: [Full Name, Job Title, Company Name, Contact Information]
+
+    Email 2:
+
+    Subject Line: [Concise subject line]
+    Body: [Organized content with distinct points, challenges, benefits, and CTA]
+    Signature: [Full Name, Job Title, Company Name, Contact Information]
+
+    Email 3:
+
+    Subject Line: [Concise subject line]
+    Body: [Organized content with distinct points, challenges, benefits, and CTA]
+    Signature: [Full Name, Job Title, Company Name, Contact Information]
+
+    Make sure that each email is tailored to engage the client, address their challenges, and clearly communicate the benefits of Cvent's software solutions. Be creative and flexible in crafting the emails to establish a strong rapport and drive conversion through personalized content.
+    """
+    return template.format(
+        contact_name=row['contact name'],
+        Title=row['Title'],
+        persona=row['persona'],
+        company_name=row['company name'],
+        Industry=row['Industry'],
+        Parent_company=row['Parent company'],
+        Relation_with_parent_company=row['Relation with parent company'],
+        Contact_Engagement_data=row['Contact Engagement data']
+    )
+
+def generate_prompts(df):
+    df['personalized_prompt'] = df.apply(generate_prompt, axis=1)
+    return df
+
+def get_email_sequence(prompt):
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": "You are an expert email marketer."},
+            {"role": "user", "content": prompt}
+        ]
+    )
+    content = response['choices'][0]['message']['content']
+    
+    emails = re.findall(r'Email \d:.*?(?=\nEmail \d:|$)', content, re.DOTALL)
+    email_dict = {}
+    
+    for email in emails:
+        email_number_match = re.search(r'Email (\d):', email)
+        subject_line_match = re.search(r'Subject Line:\s*(.*?)\n', email)
+        body_match = re.search(r'Subject Line:\s*.*?\n\n(.*)', email, re.DOTALL)
+
+        if email_number_match and subject_line_match and body_match:
+            email_number = email_number_match.group(1)
+            subject_line = subject_line_match.group(1).strip()
+            body = body_match.group(1).strip()
+            
+            email_dict[f'Email {email_number}'] = {
+                'Subject Line': subject_line,
+                'Body': body,
+            }
+    
+    return json.dumps(email_dict)
+
+def add_email_sequences(df):
+    df['email_sequence'] = df['personalized_prompt'].apply(get_email_sequence)
+    return df
+
+def send_email(to_email, subject, body):
+    msg = MIMEMultipart()
+    msg['From'] = SMTP_USERNAME
+    msg['To'] = to_email
+    msg['Subject'] = subject
+    msg.attach(MIMEText(body, 'plain'))
+    
+    try:
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            server.send_message(msg)
+        st.success(f"Email sent to {to_email}")
+    except Exception as e:
+        st.error(f"Failed to send email to {to_email}. Error: {e}")
+
+def send_emails(df):
+    for _, row in df.iterrows():
+        recipient_email = row['contact email']
+        email_subject = row['prepared_subject']
+        email_body = row['prepared_body']
+        send_email(recipient_email, email_subject, email_body)
+
+# Streamlit App
+st.title("Email Campaign Automation")
+
+# Initialize session state
+if 'step' not in st.session_state:
+    st.session_state.step = 1
+
+# Step 1: Upload Excel Document
+if st.session_state.step == 1:
+    st.header("Step 1: Upload Excel Document")
+    uploaded_file = st.file_uploader("Choose an Excel file", type="xlsx")
+    
+    if uploaded_file:
+        st.session_state.df = load_excel(uploaded_file)
+        st.session_state.step = 2
+        st.success("Document uploaded and data loaded successfully!")
+        st.dataframe(st.session_state.df)
+
+# Step 2: Select Contacts
+if st.session_state.step == 2:
+    if st.session_state.df is not None:
+        st.header("Step 2: Select Contacts")
+        contact_names = st.session_state.df['contact name'].unique().tolist()
+        contact_names.insert(0, "Select All")
+        selected_contacts = st.multiselect("Select Contact Names", contact_names)
+        
+        if "Select All" in selected_contacts:
+            selected_contacts = contact_names[1:]  # Exclude "Select All"
+        
+        st.session_state.selected_df = st.session_state.df[st.session_state.df['contact name'].isin(selected_contacts)]
+        st.dataframe(st.session_state.selected_df)
+        
+        if st.button("Proceed to Generate Prompts"):
+            st.session_state.step = 4
+
+# Step 4: Generate Personalized Prompts
+if st.session_state.step == 4:
+    if 'selected_df' in st.session_state:
+        st.header("Step 4: Generate Personalized Prompts")
+        
+        if st.button("Generate Prompts"):
+            st.session_state.selected_df = generate_prompts(st.session_state.selected_df)
+            st.session_state.step = 5
+            st.success("Prompts generated!")
+            st.dataframe(st.session_state.selected_df)
+
+# Step 5: Generate Email Sequences
+if st.session_state.step == 5:
+    if 'selected_df' in st.session_state:
+        st.header("Step 5: Generate Email Sequences")
+        
+        if st.button("Generate Sequences"):
+            st.session_state.selected_df = add_email_sequences(st.session_state.selected_df)
+            # Ensure selected_email_number is initialized
+            if 'selected_email_number' not in st.session_state:
+                st.session_state.selected_email_number = "Email 1"  # Default value or adjust as needed
+            st.session_state.step = 6
+            st.success("Email sequences generated!")
+            st.dataframe(st.session_state.selected_df)
+
+# Step 6: Filter by Email Number
+if st.session_state.step == 6:
+    if 'selected_df' in st.session_state:
+        st.header("Step 6: Filter by Email Number")
+        email_numbers = ["Email 1", "Email 2", "Email 3"]
+        selected_email_number = st.selectbox("Select Email Number", email_numbers)
+        
+        # Update the session state
+        st.session_state.selected_email_number = selected_email_number
+        
+        st.session_state.selected_df['selected_email'] = st.session_state.selected_df['email_sequence'].apply(
+            lambda x: json.loads(x).get(st.session_state.selected_email_number)
+        )
+        st.dataframe(st.session_state.selected_df[['contact name', 'selected_email']])
+        
+        if st.button("Proceed to Edit Emails"):
+            st.session_state.step = 7
+
+# Step 7: Edit Emails
+if st.session_state.step == 7:
+    if 'selected_df' in st.session_state:
+        st.header("Step 7: Edit Emails")
+        for index, row in st.session_state.selected_df.iterrows():
+            email_content = json.loads(row['email_sequence']).get(st.session_state.selected_email_number, {})
+            if email_content:
+                edited_email = st.text_area(f"Edit Email for {row['contact name']}", value=f"Subject: {email_content.get('Subject Line', '')}\n\n{email_content.get('Body', '')}", key=index)
+                if st.button("Save Email", key=f"save_{index}"):
+                    st.session_state.selected_df.at[index, 'prepared_subject'] = email_content.get('Subject Line', '')
+                    st.session_state.selected_df.at[index, 'prepared_body'] = edited_email
+                    st.success(f"Email for {row['contact name']} saved!")
+        
+        if st.button("Proceed to Send Emails"):
+            st.session_state.step = 8
+
+# Step 8: Send Emails
+if st.session_state.step == 8:
+    if 'selected_df' in st.session_state:
+        st.header("Step 8: Send Emails")
+        if st.button("Send Emails"):
+            save_to_excel(st.session_state.selected_df, "final_emails.xlsx")
+            send_emails(st.session_state.selected_df)
+            st.success("All emails sent successfully!")

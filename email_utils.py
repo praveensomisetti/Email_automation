@@ -1,4 +1,3 @@
-# email_utils.py
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -13,6 +12,9 @@ SMTP_USERNAME = os.getenv('SMTP_USERNAME')
 SMTP_PASSWORD = os.getenv('SMTP_PASSWORD')
 
 def send_email(to_email, subject, body):
+    if not isinstance(to_email, str) or not to_email.strip():
+        return f"Failed to send email. Invalid recipient address: {to_email}"
+    
     msg = MIMEMultipart()
     msg['From'] = SMTP_USERNAME
     msg['To'] = to_email
@@ -31,9 +33,15 @@ def send_email(to_email, subject, body):
 def send_emails(df):
     results = []
     for _, row in df.iterrows():
-        recipient_email = row['contact email']
-        email_subject = row['prepared_subject']
-        email_body = row['prepared_body']
-        result = send_email(recipient_email, email_subject, email_body)
+        recipient_email = str(row.get('contact email', '')).strip()
+        email_subject = str(row.get('prepared_subject', '')).strip()
+        email_body = str(row.get('prepared_body', '')).strip()
+        
+        # Ensure email data is valid
+        if recipient_email and email_subject and email_body:
+            result = send_email(recipient_email, email_subject, email_body)
+        else:
+            result = f"Invalid data for email: {row}"
+        
         results.append(result)
     return results

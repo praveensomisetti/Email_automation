@@ -3,6 +3,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
 import os
+import json
 
 # Load environment variables
 load_dotenv()
@@ -34,8 +35,8 @@ def send_emails(df):
     results = []
     for _, row in df.iterrows():
         recipient_email = str(row.get('contact email', '')).strip()
-        email_subject = str(row.get('prepared_subject', '')).strip()
-        email_body = str(row.get('prepared_body', '')).strip()
+        email_subject = str(json.loads(row.get("email_sequence", ''))["Email 1"]['Subject Line']).strip()
+        email_body = str(json.loads(row.get("email_sequence", ''))["Email 1"]['Body']).strip()
         
         # Ensure email data is valid
         if recipient_email and email_subject and email_body:

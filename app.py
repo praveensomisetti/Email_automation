@@ -22,7 +22,7 @@ logo_url = "Cvent_image.png"  # Replace with your image path or URL
 st.image(logo_url, width=150)  # Adjust width as needed
 
 # Add a headline for the app
-st.title("Email Management System")
+st.title("Email Personalization")
 
 # Step 1: Upload Excel Document
 if st.session_state.step == 1:
@@ -51,7 +51,7 @@ if st.session_state.step == 2:
         st.session_state.selected_df = st.session_state.df[st.session_state.df['contact name'].isin(selected_contacts)]
         st.dataframe(st.session_state.selected_df, use_container_width=True)
         
-        if st.button("Proceed to Generate Prompts"):
+        if st.button("Generate Prompts", key="generate_prompts_button"):
             st.session_state.step = 4
 
 # Step 4: Generate Personalized Prompts
@@ -59,7 +59,7 @@ if st.session_state.step == 4:
     if 'selected_df' in st.session_state:
         st.header("Step 4: Generate Personalized Prompts")
         
-        if st.button("Generate Prompts"):
+        if st.button("Generate Prompts", key="generate_prompts_button_2"):
             st.session_state.selected_df = generate_prompts(st.session_state.selected_df)
             st.session_state.step = 5
             st.success("Prompts generated!")
@@ -68,110 +68,77 @@ if st.session_state.step == 4:
 # Step 5: Generate Email Sequences
 if st.session_state.step == 5:
     if 'selected_df' in st.session_state:
-        st.header("Step 5: Generate Email Sequences")
+        st.header("Step 5: Generate Emails")
         
-        if st.button("Generate Sequences"):
+        if st.button("Generate Emails", key="generate_emails_button"):
             st.session_state.selected_df['email_sequence'] = st.session_state.selected_df['personalized_prompt'].apply(get_email_sequence)
             st.session_state.selected_email_number = "Email 1"  # Default value or adjust as needed
             st.session_state.step = 6
             st.success("Email sequences generated!")
             st.dataframe(st.session_state.selected_df, use_container_width=True)
 
-# Step 6: Filter by Email Number
+# Step 7: Edit Emails
+def update_df():
+    row_index = st.session_state.row_index
+    email_data2 = json.loads(st.session_state.selected_df.at[row_index, st.session_state.col_name])
+    email_data2["Email 1"]["Body"] = st.session_state.text_area
+    st.session_state.selected_df.at[row_index, st.session_state.col_name] = json.dumps(email_data2)
+
 if st.session_state.step == 6:
     if 'selected_df' in st.session_state:
-        st.header("Step 6: Filter by Email")
-        email_numbers = ["Email 1", "Email 2", "Email 3"]
-        selected_email_number = st.selectbox("Select Email Number", email_numbers)
-        
-        # Update the session state
-        st.session_state.selected_email_number = selected_email_number
-        
-        def get_selected_email(email_sequence):
+        if 'row_index' not in st.session_state:
+            st.session_state.row_index = 0
+        if 'col_name' not in st.session_state:
+            st.session_state.col_name = "email_sequence"
+        if 'text_area' not in st.session_state:
             try:
-                if pd.isna(email_sequence):
-                    return {}
-                email_dict = json.loads(email_sequence)
-                return email_dict.get(st.session_state.selected_email_number, {})
-            except (TypeError, json.JSONDecodeError):
-                return {}
-        
-        st.session_state.selected_df['selected_email'] = st.session_state.selected_df['email_sequence'].apply(get_selected_email)
-        st.dataframe(st.session_state.selected_df[['contact name', 'selected_email']], use_container_width=True)
-        
-        if st.button("Proceed to Edit Emails"):
+                email_data = json.loads(st.session_state.selected_df.at[st.session_state.row_index, st.session_state.col_name])["Email 1"]
+                st.session_state.text_area = email_data["Body"]
+            except KeyError as e:
+                st.error(f"KeyError: {e}")
+            except Exception as e:
+                st.error(f"Unexpected error: {e}")
+
+        try:
+            # Display current row's value in a text area
+            email_data = json.loads(st.session_state.selected_df.at[st.session_state.row_index, st.session_state.col_name])["Email 1"]
+            text_area_value = email_data["Body"]
+            st.text_area("Edit value", value=text_area_value, key='text_area', on_change=update_df, height=700)
+        except KeyError as e:
+            st.error(f"KeyError: {e}")
+        except Exception as e:
+            st.error(f"Unexpected error: {e}")
+
+        # Navigation buttons
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if st.button('Previous Email', key="previous_email_button"):
+                if st.session_state.row_index > 0:
+                    update_df()
+                    st.session_state.row_index -= 1
+                    st.rerun()
+                else:
+                    st.warning("Already at the first row.")
+
+        with col2:
+            if st.button('Next Email', key="next_email_button"):
+                if st.session_state.row_index < len(st.session_state.selected_df) - 1:
+                    update_df()
+                    st.session_state.row_index += 1
+                    st.rerun()
+                else:
+                    st.warning("Already at the last row.")
+
+        if st.button("Save changes", key="save_changes_button"):
+            update_df()
             st.session_state.step = 7
-            
- # Step 7: Edit Emails
+
+# Step 8: Send Emails
 if st.session_state.step == 7:
     if 'selected_df' in st.session_state:
-        st.header("Step 7: Edit Emails")
-
-        # Get the selected email number
-        selected_email_number = st.session_state.selected_email_number
-        
-        # Add a flag to check if multiple contacts are selected
-        multiple_contacts_selected = len(st.session_state.selected_df) > 1
-
-        for index, row in st.session_state.selected_df.iterrows():
-            email_content = json.loads(row['email_sequence']).get(selected_email_number, {})
-            if email_content:
-                subject_line = email_content.get('Subject Line', '')
-                body = email_content.get('Body', '')
-                edited_email_key = f"edit_{index}"
-                
-                # Display the email content in a text area
-                edited_email = st.text_area(
-                    f"Edit Email for {row['contact name']} - {selected_email_number}",
-                    value=f"Subject: {subject_line}\n\n{body}",
-                    key=edited_email_key,
-                    height = 700
-                )
-                
-                # Save button specific to this email
-                if st.button(f"Save Email {selected_email_number} for {row['contact name']}", key=f"save_{index}"):
-                    # Extract subject and body from edited_email
-                    lines = edited_email.split('\n\n', 1)
-                    if len(lines) == 2:
-                        st.session_state.selected_df.at[index, 'prepared_subject'] = lines[0].replace('Subject: ', '')
-                        st.session_state.selected_df.at[index, 'prepared_body'] = lines[1]
-                    else:
-                        st.session_state.selected_df.at[index, 'prepared_subject'] = lines[0]
-                        st.session_state.selected_df.at[index, 'prepared_body'] = ''
-                    
-                    st.success(f"Email for {row['contact name']} saved!")
-
-        # Button to save all changes if multiple contacts are selected
-        if multiple_contacts_selected:
-            if st.button("Save All Changes"):
-                for index, row in st.session_state.selected_df.iterrows():
-                    email_content = json.loads(row['email_sequence']).get(selected_email_number, {})
-                    if email_content:
-                        subject_line = email_content.get('Subject Line', '')
-                        body = email_content.get('Body', '')
-                        edited_email = st.text_area(
-                            f"Edit Email for {row['contact name']} - {selected_email_number}",
-                            value=f"Subject: {subject_line}\n\n{body}",
-                            key=f"edit_all_{index}"
-                        )
-                        # Extract subject and body from edited_email
-                        lines = edited_email.split('\n\n', 1)
-                        if len(lines) == 2:
-                            st.session_state.selected_df.at[index, 'prepared_subject'] = lines[0].replace('Subject: ', '')
-                            st.session_state.selected_df.at[index, 'prepared_body'] = lines[1]
-                        else:
-                            st.session_state.selected_df.at[index, 'prepared_subject'] = lines[0]
-                            st.session_state.selected_df.at[index, 'prepared_body'] = ''
-                
-                st.success("All changes saved!")
-
-        if st.button("Proceed to Send Emails"):
-            st.session_state.step = 8
-# Step 8: Send Emails
-if st.session_state.step == 8:
-    if 'selected_df' in st.session_state:
-        st.header("Step 8: Send Emails")
-        if st.button("Send Emails"):
+        st.header("Step 7: Send Emails")
+        if st.button("Send Emails", key="send_emails_button"):
             save_to_excel(st.session_state.selected_df, "final_emails.xlsx")
             results = send_emails(st.session_state.selected_df)
             st.success("All emails sent successfully!")

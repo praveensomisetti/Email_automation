@@ -1,0 +1,10 @@
+.env
+venv/
+app.py
+app_2.py
+app3.py
+app5.py
+*.xlsx
+new/
+__pycache__/
+e_automation.zip

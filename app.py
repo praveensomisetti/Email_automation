@@ -4,7 +4,6 @@ import json
 from utils import load_excel, save_to_excel, generate_prompts
 from openai_utils import get_email_sequence
 from email_utils import send_emails
-import logging
 
 # Set the page configuration for a wider layout
 st.set_page_config(layout="wide")
@@ -48,7 +47,7 @@ if st.session_state.step == 2:
         if "Select All" in selected_contacts:
             selected_contacts = contact_names[1:]  # Exclude "Select All"
         
-        st.session_state.selected_df = st.session_state.df[st.session_state.df['contact name'].isin(selected_contacts)]
+        st.session_state.selected_df = st.session_state.df[st.session_state.df['contact name'].isin(selected_contacts)].reset_index(drop=True)
         st.dataframe(st.session_state.selected_df, use_container_width=True)
         
         if st.button("Generate Prompts", key="generate_prompts_button"):
@@ -100,7 +99,6 @@ if st.session_state.step == 6:
                 st.error(f"Unexpected error: {e}")
 
         try:
-            # Display current row's value in a text area
             email_data = json.loads(st.session_state.selected_df.at[st.session_state.row_index, st.session_state.col_name])["Email 1"]
             text_area_value = email_data["Body"]
             st.text_area("Edit value", value=text_area_value, key='text_area', on_change=update_df, height=700)

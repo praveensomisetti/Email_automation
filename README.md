@@ -35,10 +35,16 @@ git clone "Your-repository"
 ```bash
 sudo apt install python3-pip
 ```
-Install the python3-venv package to enable the creation of virtual environments.
+
+```bash
+#Install the python3-venv package to enable the creation of virtual environments.
 sudo apt-get install python3-venv
+```
+
+```bash
 python3 -m venv myenv
 source myenv/bin/activate
+```
 
 ```bash
 pip3 install -r requirements.txt

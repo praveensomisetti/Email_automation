@@ -35,10 +35,17 @@ git clone "Your-repository"
 ```bash
 sudo apt install python3-pip
 ```
+Install the python3-venv package to enable the creation of virtual environments.
+sudo apt-get install python3-venv
+python3 -m venv myenv
+source myenv/bin/activate
 
 ```bash
 pip3 install -r requirements.txt
 ```
+Create the .env File
+you need to create a .env file in your project directory on the EC2 instance. This file will hold your environment variables.
+Save and exit the file by pressing CTRL + X, then Y, and ENTER.
 
 ```bash
 #Temporary running

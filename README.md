@@ -49,9 +49,13 @@ source myenv/bin/activate
 ```bash
 pip3 install -r requirements.txt
 ```
-Create the .env File
-you need to create a .env file in your project directory on the EC2 instance. This file will hold your environment variables.
+
+```bash
+#Create the .env File
+nano .env
+#you need to create a .env file in your project directory on the EC2 instance. This file will hold your environment variables.
 Save and exit the file by pressing CTRL + X, then Y, and ENTER.
+```
 
 ```bash
 #Temporary running

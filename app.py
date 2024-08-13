@@ -17,7 +17,7 @@ if 'current_email_index' not in st.session_state:
     st.session_state.current_email_index = 0
 
 # Add a logo to the app
-logo_url = "Cvent_image.png"  # Replace with your image path or URL
+logo_url = "ngenux.png"  # Replace with your image path or URL
 st.image(logo_url, width=150)  # Adjust width as needed
 
 # Add a headline for the app
